@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Admin — Export Shipments</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  body {font-family:'Poppins',sans-serif;margin:20px;background:url('background.jpg') no-repeat center center fixed;background-size:cover;color:#fff}
+  .overlay {background:rgba(0,0,0,0.5);min-height:100vh;padding:24px;border-radius:8px}
+  h2 {color:#ffcc80;text-align:center;margin-bottom:6px}
+  .controls {display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center;margin-bottom:12px}
+  .btn {padding:6px 10px;border-radius:6px;border:none;font-weight:600;cursor:pointer}
+  .btn-primary {background:#ff9800;color:#fff}
+  .btn-success {background:#4caf50;color:#fff}
+  input.search {padding:8px;border-radius:6px;border:none;width:320px}
+  .dropdown {position:relative;display:inline-block;}
+  .dropdown-content {
+    display:none;
+    position:absolute;
+    background:#fff;
+    min-width:140px;
+    box-shadow:0 2px 6px rgba(0,0,0,0.3);
+    border-radius:6px;
+    z-index:99;
+  }
+  .dropdown-content button {
+    background:none;
+    border:none;
+    color:#333;
+    padding:8px 12px;
+    text-align:left;
+    width:100%;
+    font-size:13px;
+    cursor:pointer;
+  }
+  .dropdown-content button:hover {background:#eee;}
+  .dropdown:hover .dropdown-content {display:block;}
+  table {width:100%;border-collapse:collapse;background:rgba(255,255,255,0.95);color:#333;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.15)}
+  th {background:linear-gradient(90deg,#3c78b4,#2864a0);color:#fff;padding:8px;text-align:left;font-size:13px}
+  td {padding:6px;font-size:13px}
+  tr:nth-child(even) td {background:#f8f8f8}
+  .editable {background:#fff9e0;border-radius:4px;padding:4px}
+  th:nth-last-child(2),td:nth-last-child(2) {width:90px;text-align:center}
+  th:last-child,td:last-child {width:80px;text-align:center}
+  td button {padding:4px 7px;font-size:12px}
+  .delete-btn {cursor:pointer;color:#ff5722;font-size:15px;margin-left:6px}
+  .logo {position:absolute;top:20px;right:20px;width:100px;animation:logoAnim 1.5s ease-in-out infinite alternate}
+  @keyframes logoAnim {0%{transform:scale(1) rotate(0);opacity:0.8}50%{transform:scale(1.05) rotate(2deg);opacity:1}100%{transform:scale(1) rotate(-2deg);opacity:0.9}}
+</style>
+</head>
+<body>
+<div class="overlay">
+  <h2>Admin — Export Shipments</h2>
+  <div style="text-align:center;margin-bottom:10px;color:#ffdca2">by nazrll</div>
+
+  <div id="loginSection" style="text-align:center;margin-bottom:12px">
+    <input id="email" type="email" placeholder="Email" style="padding:8px;border-radius:6px;border:none;margin-right:6px">
+    <input id="password" type="password" placeholder="Password" style="padding:8px;border-radius:6px;border:none;margin-right:6px">
+    <button id="loginBtn" class="btn btn-primary">Login</button>
+  </div>
+
+  <div id="adminSection" style="display:none">
+    <div class="controls">
+      <button id="logoutBtn" class="btn btn-primary">Logout</button>
+      <button id="addRowBtn" class="btn btn-primary">+ Tambah Data</button>
+      
+      <div class="dropdown">
+        <button class="btn btn-success">Export Data ▾</button>
+        <div class="dropdown-content">
+          <button id="exportExcel">Export to Excel</button>
+          <button id="exportCSV">Export to CSV</button>
+        </div>
+      </div>
+
+      <div class="dropdown">
+        <button class="btn btn-primary">Filter Progress ▾</button>
+        <div class="dropdown-content">
+          <button id="filterAll">Semua</button>
+          <button id="filterDone">Selesai</button>
+          <button id="filterPending">Belum Selesai</button>
+        </div>
+      </div>
+
+      <input id="mainSearch" class="search" placeholder="Cari Bill of Lading atau Vessel/Voyage">
+    </div>
+
+    <table id="exportTable" aria-live="polite">
+      <thead>
+        <tr>
+          <th>Bill of Lading</th>
+          <th>Vessel/Voyage</th>
+          <th>ETA</th>
+          <th>POT</th>
+          <th>Connecting Vessel</th>
+          <th>ETD</th>
+          <th>ETA POD</th>
+          <th>POD</th>
+          <th>DO Release Date</th>
+          <th>Cargo Release Date</th>
+          <th>Progress</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<img src="logo.png" class="logo" alt="Logo">
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+import { getFirestore, collection, getDocs, doc, updateDoc, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBwIvGNogDk6nKCCcoWxmnvex4pbSIR07g",
+  authDomain: "track-and-trace-ca19a.firebaseapp.com",
+  projectId: "track-and-trace-ca19a",
+  storageBucket: "track-and-trace-ca19a.appspot.com",
+  messagingSenderId: "264766950053",
+  appId: "1:264766950053:web:b871670f2ab2c10d0f1b4c"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const loginSection = document.getElementById('loginSection');
+const adminSection = document.getElementById('adminSection');
+const tableBody = document.querySelector('#exportTable tbody');
+
+document.getElementById('loginBtn').addEventListener('click', () => {
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  if (!email || !password) return alert('Masukkan email & password');
+  signInWithEmailAndPassword(auth, email, password).catch(err => alert('Login gagal: ' + err.message));
+});
+
+document.getElementById('logoutBtn').addEventListener('click', () => signOut(auth));
+
+onAuthStateChanged(auth, user => {
+  if (user) { loginSection.style.display='none'; adminSection.style.display='block'; loadData(); }
+  else { loginSection.style.display='block'; adminSection.style.display='none'; }
+});
+
+async function loadData(){
+  tableBody.innerHTML = '';
+  const snap = await getDocs(collection(db,'shipments'));
+  snap.forEach(s => addRow(s.id, s.data()));
+}
+
+function addRow(id, data){
+  const tr = document.createElement('tr');
+  const fields = ['billOfLading','vesselVoyage','eta','pot','connectingVessel','etd','etaPod','pod','doReleaseDate','cargoReleaseDate'];
+  fields.forEach(field => {
+    const td = document.createElement('td');
+    td.textContent = data[field] || '';
+    td.contentEditable = true;
+    td.classList.add('editable');
+    tr.appendChild(td);
+  });
+
+  const progressTd = document.createElement('td');
+  const isComplete = fields.every(f => (data[f]||'').trim() !== '');
+  progressTd.textContent = isComplete ? '✅' : '❌';
+  progressTd.dataset.status = isComplete ? 'done' : 'pending';
+  progressTd.style.color = isComplete ? 'green' : 'red';
+  tr.appendChild(progressTd);
+
+  const actionTd = document.createElement('td');
+  const saveBtn = document.createElement('button');
+  saveBtn.textContent = 'Save';
+  saveBtn.classList.add('btn');
+  saveBtn.addEventListener('click', async () => {
+    const updated = {};
+    fields.forEach((f,i)=> updated[f] = tr.cells[i].textContent.trim());
+    if (!updated.billOfLading) return alert('Bill Of Lading wajib diisi');
+    await updateDoc(doc(db,'shipments',id),updated);
+    alert('Tersimpan');
+    loadData();
+  });
+
+  const del = document.createElement('span');
+  del.textContent = '🗑';
+  del.classList.add('delete-btn');
+  del.addEventListener('click', async ()=>{ if(!confirm('Yakin hapus?')) return; await deleteDoc(doc(db,'shipments',id)); loadData(); });
+
+  actionTd.appendChild(saveBtn);
+  actionTd.appendChild(del);
+  tr.appendChild(actionTd);
+  tableBody.appendChild(tr);
+}
+
+document.getElementById('addRowBtn').addEventListener('click', async () => {
+  const newDoc = { billOfLading:'', vesselVoyage:'', eta:'', pot:'', connectingVessel:'', etd:'', etaPod:'', pod:'', doReleaseDate:'', cargoReleaseDate:'' };
+  await addDoc(collection(db,'shipments'), newDoc);
+  loadData();
+});
+
+document.getElementById('mainSearch').addEventListener('input', function(){
+  const q = this.value.toLowerCase();
+  Array.from(tableBody.rows).forEach(row=>{
+    const bol = row.cells[0].textContent.toLowerCase();
+    const vessel = row.cells[1].textContent.toLowerCase();
+    row.style.display = (bol.includes(q)||vessel.includes(q)) ? '' : 'none';
+  });
+});
+
+document.getElementById('exportExcel').addEventListener('click', () => exportTableToExcel('exportTable','export_data'));
+document.getElementById('exportCSV').addEventListener('click', () => exportTableToCSV('export_data.csv'));
+document.getElementById('filterAll').addEventListener('click', () => { Array.from(tableBody.rows).forEach(r=> r.style.display=''); });
+document.getElementById('filterDone').addEventListener('click', () => { Array.from(tableBody.rows).forEach(r=> r.style.display = r.cells[10].dataset.status==='done'?'':'none'); });
+document.getElementById('filterPending').addEventListener('click', () => { Array.from(tableBody.rows).forEach(r=> r.style.display = r.cells[10].dataset.status==='pending'?'':'none'); });
+
+function exportTableToExcel(tableID, filename = ''){
+  const dataType = 'application/vnd.ms-excel';
+  const tableSelect = document.getElementById(tableID);
+  const tableHTML = tableSelect.outerHTML.replace(/ /g, '%20');
+  filename = filename?filename+'.xls':'excel_data.xls';
+  const downloadLink = document.createElement('a');
+  document.body.appendChild(downloadLink);
+  downloadLink.href = 'data:'+dataType+', '+tableHTML;
+  downloadLink.download = filename;
+  downloadLink.click();
+}
+
+function exportTableToCSV(filename){
+  const csv = [];
+  const rows = document.querySelectorAll('table tr');
+  rows.forEach(row=>{
+    const cols = row.querySelectorAll('td, th');
+    const rowData = Array.from(cols).map(c=>c.innerText);
+    csv.push(rowData.join(','));
+  });
+  const csvFile = new Blob([csv.join('\n')], { type:'text/csv' });
+  const downloadLink = document.createElement('a');
+  downloadLink.download = filename;
+  downloadLink.href = window.URL.createObjectURL(csvFile);
+  downloadLink.click();
+}
+</script>
+</body>
+</html>
